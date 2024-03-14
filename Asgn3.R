@@ -65,8 +65,13 @@ elastic_net_foldid <- cv.glmnet(x = as.matrix(x_train),
                                 keep = TRUE
                                 )
 
+#foldid of initial elastic net regression set to foldid variable
 foldid <- elastic_net_foldid$foldid
+
+#view different folds
 foldid
+
+#see if the folds have been properly interspersed
 table(foldid)
 
 
@@ -111,47 +116,70 @@ cv <- cv.glmnet(x = as.matrix(x_train),
 #return the value of the lowest lambda generated 
 cv$lambda.min
 
-#view plot, Binomial deviance vs log(lambda)
+#view plot, Binomial deviance vs log(lambda), the left dotted line is lambda.min, the right dotted line is lambda.1se
 plot(cv)
 
-## fitted values and test set predictions
-## model evaluation ####
+## fitted values and test set predictions ####
 
+#predict response values using model generated using elastic net regression, where newx is a matrix of training set predictor values, using the minimum lambda value found in model.   
 prds.train <- predict(cv,newx = as.matrix(x_train), type = "response", s=cv$lambda.min)[,1]
+
+#predict response values using model generated using elastc net regression, where newx is a matrix of test set predictor values, using the minimum lambda value found in model. 
 prds.test <- predict(cv,newx = as.matrix(x_test), type = "response", s=cv$lambda.min)[,1]
 
-auc.train <- roc(y_train, prds.train)
+## Prediction accuracy
 
-auc.train
+#working with training set, builds a ROC curve
+dev.train <- roc(y_train, prds.train)
 
-par(mfrow=c(1,2))
+#area under the curve 0.9143
+dev.train
 
-plot(auc.train)
-
-auc.test <- roc(y_test, prds.test)
-auc.test
-plot(auc.test)
+#Visualize the ROC curve for training dataset 
+#each point on the curve is associated with threshold value
 par(mfrow=c(1,1))
+plot(dev.train)
+
+#working with training set, builds a ROC curve
+dev.test <- roc(y_test, prds.test)
+
+#area under the curve is 0.8778, is not able not as accurately predict covid severity outcomes in unseen data compared to training set but still good 
+dev.test
+
+#view ROC curve for test dataset
+#each point on the curve is associated with threshold value
+par(mfrow=c(1,1))
+plot(dev.test)
+
 
 max(cv$cvm)
 which.max(cv$cvm)
 
+## Sensitivity, specificity, and classification cutoff
+
 #check contingency table of response variable in training set 
 table(y_train) 
 
+#view table of predicted response, any value above 0.5 is considered 1, any value below 0.5 is considered 0
 table(as.numeric(prds.train>.5))
 
+#generating the confusion matrix
 conf.mat1 <- table(y=y_train,yhat=as.numeric(prds.train>.5))
+
+#view confusion matrix
 conf.mat1
 
+#use function to compute sensitivity and specifity 
 sn.sp <- function(mat){
   sn <- mat[2,2]/sum(mat[2,])
   sp <- mat[1,1]/sum(mat[1,])
   return(unlist(list(sensitivity=sn, specificity=sp)))
 }
 
+#threshold is too skewed towards sensitivity
 sn.sp(conf.mat1)
 
+#manually determining an ideal threshold value
 sn.sp(table(y=y_train,yhat=as.numeric(prds.train>.55)))
 
 sn.sp(table(y=y_train,yhat=as.numeric(prds.train>.70)))
@@ -164,25 +192,31 @@ sn.sp(table(y=y_train,yhat=as.numeric(prds.train>.63)))
 
 sn.sp(table(y=y_train,yhat=as.numeric(prds.train>.635)))
 
-str(auc.test) 
+## Determining the threshold rigourously #### 
+#using training set, generate a matrix of sensitivity and specificity 
+snsp.train <- cbind(dev.train$sensitivities,dev.train$specificities)
 
-#training set
-
-snsp.train <- cbind(auc.train$sensitivities,auc.train$specificities)
+#view head of matrix
 head(snsp.train)
 
-indx <- which.max(apply(snsp.train,1,min))  ### min-max approach!
+#uses min-max approach to try to maximize both sensitivity and specificity
+indx <- which.max(apply(snsp.train,1,min))
+
+#indicates which row contains maximized sensitivity and specificity
 indx
+
+#index row with maximized sensitivity and specificity 
 snsp.train[indx,]
 
-#this is the t value, if phat is greater than 0.6375976 patient has severe covid
-cutoff <- auc.train$thresholds[indx]
+#this is the t value, if phat is greater than 0.6304922 patient has severe covid
+cutoff <- dev.train$thresholds[indx]
 cutoff
 
-#the intersection of blue dotted lines, is the threshold that is closest to (0,1) the ideal that threshold goes to
-
-plot(auc.train)
+#the intersection of blue dotted lines, is the threshold that is closest to (0,1) the ideal that threshold goes to.
+plot(dev.train, main = "Sensitivity vs Specificity plot")
 abline(h=snsp.train[indx,1],v=snsp.train[indx,2], col='blue', lty=2)
+
+# Additional work ####
 
 hist(prds.train)
 
