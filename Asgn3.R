@@ -278,7 +278,6 @@ p <- ggplot(data = covid_data, aes(x = AGE, y = resp, color = resp)) +
   geom_point(size = 2) + 
   scale_color_manual(values = c("blue", "red"), labels = c("Mild", "Severe"), name = "Severity") +
   labs(x = "X axis", y = "Y axis", title = "Scatter plot with legend")
-p
 
 # Show the plot
 print(p)
