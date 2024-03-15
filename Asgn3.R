@@ -3,6 +3,7 @@
 
 library(glmnet)
 library(pROC)
+library(ggplot2)
 
 ## Exploratory data analysis ####
 #Load data, initially converted from .xlsx to in .csv format using google sheets 
@@ -213,37 +214,79 @@ cutoff <- dev.train$thresholds[indx]
 cutoff
 
 #the intersection of blue dotted lines, is the threshold that is closest to (0,1) the ideal that threshold goes to.
-plot(dev.train, main = "Sensitivity vs Specificity plot")
+plot(dev.train, main = "Sensitivity vs Specificity plot using training set")
 abline(h=snsp.train[indx,1],v=snsp.train[indx,2], col='blue', lty=2)
 
-# Additional work ####
+#using training set, generate a matrix of sensitivity and specificity
+snsp.test <- cbind(dev.test$sensitivities, dev.test$specificities)
+
+#uses min-max approach to try to maximize both sensitivity and specificity
+indx2 <- which.max(apply(snsp.test,1,min))  ### min-max approach!
+
+#indicates which row contains maximized sensitivity and specificity
+indx2
+
+#index row with maximized sensitivity and specificity 
+snsp.test[indx2,]
+
+#the intersection of blue dotted lines, is the threshold that is closest to (0,1) the ideal that threshold goes to
+plot(dev.test, main = "Sensitivity vs Specificity plot using test set")
+abline(h=snsp.test[indx2,1],v=snsp.test[indx2,2], col='blue', lty=2)
+
+#this is the threshold, t value, if phat is greater than 0.6429771 patient has severe covid
+cutoff2 <- dev.test$thresholds[indx2]
+cutoff2
+
+#Indicating which cytokines are most effective at predicting disease progression in patients ####
 
 hist(prds.train)
 
-#cytokines best predictors of COVID 
-
-coef (cv , s = cv$lambda.min)
-
+#retrieve the coefficients of the best model (according to lambda.min)
 coef.min <- coef(cv , s = cv$lambda.min)[,1]
+
+#transfer to dataframe
 coefficients <- data.frame(coef.min)
+
+#remove intercept, retaining rownames
 coefficients <- coefficients[-1, ,drop = FALSE]
 
+#determine the standard deviation of the predictive features
 sd <- apply(x_train,2, sd)
+
+#transfer to dataframe
 sd <- as.data.frame(sd)
 
+#generate standardized coefficients by multiplying with respective standard deviation values
 standardized <- coefficients * sd
+
+#return only absolute values
 standardized <- abs(standardized)
+
+#remove any rows/covarites that have been reduced to 0.0 
 standardized <- standardized[standardized != 0, , drop = FALSE]
+
+#order rows according to standardized coefficient, in descending manner
 standardized <- standardized[ order(-standardized$coef.min), , drop = FALSE]
 
+## Determination of how AGE correlates with Covid 
 
+#summary of AGE feature from whole dataset
 summary(covid_data$AGE)
 
-class(covid_data$AGE)
+#scatter plot of how AGE correlates with covid severity 
+p <- ggplot(data = covid_data, aes(x = AGE, y = resp, color = resp)) +
+  geom_point(size = 2) + 
+  scale_color_manual(values = c("blue", "red"), labels = c("Mild", "Severe"), name = "Severity") +
+  labs(x = "X axis", y = "Y axis", title = "Scatter plot with legend")
+p
 
-plot(covid_data$AGE, covid_data$resp)
-dim(covid_data)
+# Show the plot
+print(p)
 
+
+covid_data$resp
+class(covid_data$resp)
+#view the possible skew of age feature
 hist(covid_data$AGE)
 
 correlation <- cor.test(as.numeric(covid_data$AGE), as.numeric(covid_data$resp), method = "pearson")
@@ -252,5 +295,4 @@ print(correlation)
 
 boxplot(covid_data$AGE ~ covid_data$resp, xlab = "Severity", ylab = "Age",
         main = "Age Distribution by Severity")
-
 
